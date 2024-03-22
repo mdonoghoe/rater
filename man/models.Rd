@@ -5,6 +5,7 @@
 \alias{dawid_skene}
 \alias{hier_dawid_skene}
 \alias{class_conditional_dawid_skene}
+\alias{dawid_skene_unsure}
 \title{Probabilistic models of repeated categorical rating}
 \usage{
 dawid_skene(alpha = NULL, beta = NULL)
@@ -12,6 +13,15 @@ dawid_skene(alpha = NULL, beta = NULL)
 hier_dawid_skene(alpha = NULL)
 
 class_conditional_dawid_skene(alpha = NULL, beta_1 = NULL, beta_2 = NULL)
+
+dawid_skene_unsure(
+  alpha = NULL,
+  beta = NULL,
+  diff_mu = NULL,
+  diff_kappa = NULL,
+  conf_s = NULL,
+  delta_sd = NULL
+)
 }
 \arguments{
 \item{alpha}{prior parameter for pi}
@@ -73,5 +83,29 @@ class_conditional_dawid_skene(
   beta_1 = c(4, 4),
   beta_2 = c(2, 2)
 )
+
+# Model with default prior parameters:
+default_m <- dawid_skene()
+
+# Changing alpha:
+set_alpha_m <- dawid_skene(alpha = c(2, 2, 2))
+
+# Changing beta, single matrix:
+# (See details for how this is interpreted.)
+beta_mat <- matrix(1, nrow = 4, ncol = 4)
+diag(beta_mat) <- 4
+beta_mat_m <- dawid_skene()
+
+# The above is equivalent (when the model is fit - see details) to:
+beta_array <- array(NA, dim = c(2, 4, 4))
+for (i in 1:2) {
+  beta_array[i, , ] <- beta_mat
+}
+beta_array_m <- dawid_skene(beta = beta_array)
+
+# But you can also specify an array where each slice is different.
+# (Again, see details for how this is interpreted.)
+beta_array[1, , ] <- matrix(1, nrow = 4, ncol = 4)
+beta_array_m <- dawid_skene(beta = beta_array)
 
 }

@@ -14,12 +14,14 @@ Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 
 RcppExport SEXP _rcpp_module_boot_stan_fit4class_conditional_dawid_skene_mod();
 RcppExport SEXP _rcpp_module_boot_stan_fit4dawid_skene_mod();
+RcppExport SEXP _rcpp_module_boot_stan_fit4dawid_skene_unsure_mod();
 RcppExport SEXP _rcpp_module_boot_stan_fit4grouped_data_mod();
 RcppExport SEXP _rcpp_module_boot_stan_fit4hierarchical_dawid_skene_mod();
 
 static const R_CallMethodDef CallEntries[] = {
     {"_rcpp_module_boot_stan_fit4class_conditional_dawid_skene_mod", (DL_FUNC) &_rcpp_module_boot_stan_fit4class_conditional_dawid_skene_mod, 0},
     {"_rcpp_module_boot_stan_fit4dawid_skene_mod", (DL_FUNC) &_rcpp_module_boot_stan_fit4dawid_skene_mod, 0},
+    {"_rcpp_module_boot_stan_fit4dawid_skene_unsure_mod", (DL_FUNC) &_rcpp_module_boot_stan_fit4dawid_skene_unsure_mod, 0},
     {"_rcpp_module_boot_stan_fit4grouped_data_mod", (DL_FUNC) &_rcpp_module_boot_stan_fit4grouped_data_mod, 0},
     {"_rcpp_module_boot_stan_fit4hierarchical_dawid_skene_mod", (DL_FUNC) &_rcpp_module_boot_stan_fit4hierarchical_dawid_skene_mod, 0},
     {NULL, NULL, 0}

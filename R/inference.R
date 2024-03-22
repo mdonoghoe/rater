@@ -72,7 +72,7 @@ rater <- function(data,
                   ) {
 
   method <- match.arg(method, choices = c("mcmc", "optim"))
-  data_format <- match.arg(data_format, choices = c("long", "grouped", "wide"))
+  data_format <- match.arg(data_format, choices = c("long", "grouped", "wide", "long_unsure"))
 
   check_long_data_colnames(long_data_colnames, data_format)
 
@@ -159,6 +159,26 @@ as_stan_data <- function(data, data_format, long_data_colnames) {
   rater_col_name <- long_data_colnames[["rater"]]
   rating_col_name <- long_data_colnames[["rating"]]
 
+  if (data_format == "long_unsure") {
+
+    stan_data <- list(
+      N = nrow(data$rating),
+      I = max(c(data$rating[[item_col_name]],
+                data$unsure[[item_col_name]])),
+      J = max(c(data$rating[[rater_col_name]],
+                data$unsure[[rater_col_name]])),
+      K = max(data$rating[[rating_col_name]]),
+      ii = data$rating[[item_col_name]],
+      jj = data$rating[[rater_col_name]],
+      y = data$rating[[rating_col_name]],
+      N0 = nrow(data$unsure),
+      ii0 = data$unsure[[item_col_name]],
+      jj0 = data$unsure[[rater_col_name]]
+    )
+    return(stan_data)
+
+  }
+
   stan_data <- list(
     N = nrow(data),
     I = max(data[[item_col_name]]),
@@ -189,6 +209,7 @@ parse_priors <- function(model, K, J) {
     "class_conditional_dawid_skene" =
       class_conditional_ds_parse_priors(model, K),
     "hierarchical_dawid_skene" = hier_ds_parse_priors(model, K),
+    "dawid_skene_unsure" = ds_unsure_parse_priors(model, K, J),
     stop("Unsupported model type", call. = FALSE))
 }
 
@@ -261,6 +282,68 @@ class_conditional_ds_parse_priors <- function(model, K) {
   pars
 }
 
+ds_unsure_parse_priors <- function(model, K, J) {
+  pars <- get_parameters(model)
+
+  # This is the default uniform prior taken from the Stan manual.
+  if (is.null(pars$alpha)) {
+    pars$alpha <- rep(3, K)
+  }
+
+  # We need to alter the passed beta if:
+  # 1. It is a matrix - and we need to convert it into an array.
+  # 2. It is null - we need to create the default prior.
+  # Ideally this would be done earlier but we need to to know J. The matrix
+  # has already been validated i.e. it is square.
+
+  # 1.
+  # Convert from matrix to array.
+  if (is.matrix(pars$beta)) {
+    beta_slice <- pars$beta
+    pars$beta <- array(dim = c(J, K, K))
+    for (j in 1:J) {
+      pars$beta[j, , ] <- beta_slice
+    }
+  }
+
+  # 2.
+  # This prior parameter is based on conjugate priors for the simplified model
+  # where the true class in known.
+  if (is.null(pars$beta)) {
+    N <- 8
+    p <- 0.6
+    on_diag <- N * p
+    off_diag <- N * (1 - p) / (K - 1)
+
+    beta_slice <- matrix(off_diag, nrow = K, ncol = K)
+    diag(beta_slice) <- on_diag
+
+    pars$beta <- array(dim = c(J,K,K))
+    for (j in 1:J) {
+      pars$beta[j, , ] <- beta_slice
+    }
+  }
+
+  if (is.null(pars$diff_mu)) {
+    # From Gelman et al 2013, Chapter 5
+    pars$diff_mu <- c(1, 1)
+  }
+
+  if (is.null(pars$diff_kappa)) {
+    pars$diff_kappa <- c(0.1, 1.5)
+  }
+
+  if (is.null(pars$conf_s)) {
+    pars$conf_s <- 3 / (qnorm(0.975) * qnorm(0.995))
+  }
+
+  if (is.null(pars$delta_sd)) {
+    pars$delta_sd <- 2 / qnorm(0.995)
+  }
+
+  pars
+}
+
 #' Creates initialization points for the Stan.
 #'
 #' @param model rater model
@@ -272,12 +355,14 @@ class_conditional_ds_parse_priors <- function(model, K) {
 #'
 create_inits <- function(model, stan_data) {
   # better to have another short unique id...
+  I <- stan_data$I
   K <- stan_data$K
   J <- stan_data$J
   switch(get_file(model),
     "dawid_skene" = dawid_skene_inits(K, J),
     "class_conditional_dawid_skene" = class_conditional_dawid_skene_inits(K, J),
     "hierarchical_dawid_skene" = hier_dawid_skene_inits(K, J),
+    "dawid_skene_unsure" = dawid_skene_unsure_inits(K, J, I),
     stop("Unsupported model type", call. = FALSE))
 }
 
@@ -332,6 +417,25 @@ hier_dawid_skene_inits <- function(K, J) {
   beta_raw_init <- array(0, c(J, K, K))
   function(n) list(pi = pi_init, mu = mu_init, sigma = sigma_init,
                    beta_raw = beta_raw_init)
+}
+
+dawid_skene_unsure_inits <- function(K, J, I) {
+  pi_init <- rep(1/K, K)
+  theta_init <- array(0.2 / (K - 1), c(J, K, K))
+  for (j in 1:J) {
+      diag(theta_init[j, ,]) <- 0.8
+  }
+  # Haven't really thought about these...
+  diff_mean_init = 0.5
+  diff_ssize_init = 2
+  difficulty_init = rep(0.5, I)
+  conf_sigma_init = 1
+  confidence_init = rep(0, J)
+  delta_init = 0
+  function(n) list(theta = theta_init, pi = pi_init, diff_mean = diff_mean_init,
+                   diff_ssize = diff_ssize_init, difficulty = difficulty_init,
+                   conf_sigma = conf_sigma_init, confidence = confidence_init,
+                   delta = delta_init)
 }
 
 #' Helper to check if the prior parameters and data have consistent dimensions
@@ -390,6 +494,7 @@ validate_model <- function(model) {
       "dawid_skene" = dawid_skene(),
       "hier_dawid_skene" = hier_dawid_skene(),
       "class_conditional_dawid_skene" = class_conditional_dawid_skene(),
+      "dawid_skene_unsure" = dawid_skene_unsure(),
       stop("Invalid model string specification.", call. = FALSE))
   }
 
@@ -572,6 +677,15 @@ validate_data <- function(data, data_format, long_data_colnames) {
     if (length(error_messages) == 2) {
         stop("\n", paste0("* ", error_messages, collapse = "\n"), call. = FALSE)
     }
+
+  } else if (data_format == "long_unsure") {
+
+    rating_col_name <- long_data_colnames[["rating"]]
+    data_rating <- data[data[[rating_col_name]] != 0, , drop = FALSE]
+    data_unsure <- data[data[[rating_col_name]] == 0, , drop = FALSE]
+
+    data <- list(rating = validate_data(data_rating, "long", long_data_colnames),
+                 unsure = data_unsure)
 
   }
 

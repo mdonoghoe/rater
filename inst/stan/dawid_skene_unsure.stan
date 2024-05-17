@@ -95,7 +95,18 @@ model {
 
 generated quantities {
   vector[I] log_lik;
+  vector[J] accuracy;
+  vector[J] weighted_accuracy;
   for (i in 1:I) {
     log_lik[i] = log_sum_exp(log_p_z[i]);
   }
+  for (j in 1:J) {
+    accuracy[j] = 0.0;
+    weighted_accuracy[j] = 0.0;
+    for (k in 1:K) {
+      accuracy[j] += theta[j, k, k];
+      weighted_accuracy[j] += pi[k] * theta[j, k, k];
+    }
+  }
+  accuracy ./= K;
 }

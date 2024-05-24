@@ -162,18 +162,16 @@ as_stan_data <- function(data, data_format, long_data_colnames) {
   if (data_format == "long_unsure") {
 
     stan_data <- list(
-      N = nrow(data$rating),
-      I = max(c(data$rating[[item_col_name]],
-                data$unsure[[item_col_name]])),
-      J = max(c(data$rating[[rater_col_name]],
-                data$unsure[[rater_col_name]])),
-      K = max(data$rating[[rating_col_name]]),
-      ii = data$rating[[item_col_name]],
-      jj = data$rating[[rater_col_name]],
-      y = data$rating[[rating_col_name]],
-      N0 = nrow(data$unsure),
-      ii0 = data$unsure[[item_col_name]],
-      jj0 = data$unsure[[rater_col_name]]
+      I = max(data[[item_col_name]]),
+      J = max(data[[rater_col_name]]),
+      K = max(data[[rating_col_name]]),
+      N1 = sum(data[[rating_col_name]] != 0),
+      N0 = sum(data[[rating_col_name]] == 0),
+      idx1 = which(data[[rating_col_name]] != 0),
+      idx0 = which(data[[rating_col_name]] == 0),
+      ii = data[[item_col_name]],
+      jj = data[[rater_col_name]],
+      y = data[[rating_col_name]]
     )
     return(stan_data)
 
@@ -681,11 +679,15 @@ validate_data <- function(data, data_format, long_data_colnames) {
   } else if (data_format == "long_unsure") {
 
     rating_col_name <- long_data_colnames[["rating"]]
-    data_rating <- data[data[[rating_col_name]] != 0, , drop = FALSE]
-    data_unsure <- data[data[[rating_col_name]] == 0, , drop = FALSE]
+    idx1 <- which(data[[rating_col_name]] != 0)
+    data_rating <- data[idx1, , drop = FALSE]
+    idx0 <- which(data[[rating_col_name]] == 0)
+    data_unsure <- data[idx0, , drop = FALSE]
 
-    data <- list(rating = validate_data(data_rating, "long", long_data_colnames),
-                 unsure = data_unsure)
+    data_checked <- rbind(validate_data(data_rating, "long", long_data_colnames),
+                          data_unsure)
+
+    data <- data_checked[order(c(idx1, idx0)), , drop = FALSE]
 
   }
 
